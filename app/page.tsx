@@ -25,15 +25,9 @@ export default function VoronoiDesigner() {
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
 
-  // Custom shape options
+  // Custom shape options (circle only)
   const [useCustomShape, setUseCustomShape] = useState(false);
-  const [shapeType, setShapeType] = useState<'polygon' | 'circle'>('polygon');
-  const [isDrawingShape, setIsDrawingShape] = useState(false);
-  const [customShape, setCustomShape] = useState<Point[]>([]);
   const [customCircle, setCustomCircle] = useState<{ center: Point, radius: number } | null>(null);
-  const [tempShapePoint, setTempShapePoint] = useState<Point | null>(null);
-  const [isDrawingCircle, setIsDrawingCircle] = useState(false);
-  const [circleCenter, setCircleCenter] = useState<Point | null>(null);
 
   // Export options
   const [exportVoronoi, setExportVoronoi] = useState(true);
@@ -63,8 +57,8 @@ export default function VoronoiDesigner() {
         y: margin + seededRandom() * (canvasSize.height - 2 * margin)
       };
 
-      // If using custom shape, only add points inside the shape
-      if (useCustomShape && ((shapeType === 'polygon' && customShape.length >= 3) || (shapeType === 'circle' && customCircle))) {
+      // If using custom shape, only add points inside the circle
+      if (useCustomShape && customCircle) {
         if (isPointInCustomShape(point)) {
           newPoints.push(point);
           i++;
@@ -197,11 +191,9 @@ export default function VoronoiDesigner() {
     return distance <= circle.radius;
   };
 
-  // Helper function to check if point is inside custom shape
+  // Helper function to check if point is inside custom circle
   const isPointInCustomShape = (point: Point): boolean => {
-    if (shapeType === 'polygon' && customShape.length >= 3) {
-      return isPointInPolygon(point, customShape);
-    } else if (shapeType === 'circle' && customCircle) {
+    if (customCircle) {
       return isPointInCircle(point, customCircle);
     }
     return true;
@@ -255,10 +247,20 @@ export default function VoronoiDesigner() {
     return () => window.removeEventListener('resize', updateCanvasSize);
   }, []);
 
+  // Create default circle when boundary is enabled
+  useEffect(() => {
+    if (useCustomShape && !customCircle && canvasSize.width > 0 && canvasSize.height > 0) {
+      const centerX = canvasSize.width / 2;
+      const centerY = canvasSize.height / 2;
+      const radius = Math.min(canvasSize.width, canvasSize.height) * 0.3; // 30% of smaller dimension
+      setCustomCircle({ center: { x: centerX, y: centerY }, radius });
+    }
+  }, [useCustomShape, canvasSize, customCircle]);
+
   // Initialize with random points
   useEffect(() => {
     generatePattern();
-  }, [numPoints, seed, canvasSize, useCustomShape, customShape, customCircle, shapeType]);
+  }, [numPoints, seed, canvasSize, useCustomShape, customCircle]);
 
   // Draw on canvas
   useEffect(() => {
@@ -272,59 +274,17 @@ export default function VoronoiDesigner() {
     const delaunay = Delaunay.from(points.map(p => [p.x, p.y]));
     const voronoi = delaunay.voronoi([0, 0, canvasSize.width, canvasSize.height]);
 
-    // Draw custom shape boundary
-    if (useCustomShape) {
+    // Draw custom circle boundary
+    if (useCustomShape && customCircle) {
       ctx.strokeStyle = '#059669'; // Green color for custom boundary
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]); // Dashed line
 
-      if (shapeType === 'polygon' && customShape.length > 0) {
-        ctx.beginPath();
-        ctx.moveTo(customShape[0].x, customShape[0].y);
-        for (let i = 1; i < customShape.length; i++) {
-          ctx.lineTo(customShape[i].x, customShape[i].y);
-        }
-        if (customShape.length > 2) {
-          ctx.closePath();
-        }
-        ctx.stroke();
-      } else if (shapeType === 'circle' && customCircle) {
-        ctx.beginPath();
-        ctx.arc(customCircle.center.x, customCircle.center.y, customCircle.radius, 0, 2 * Math.PI);
-        ctx.stroke();
-      }
+      ctx.beginPath();
+      ctx.arc(customCircle.center.x, customCircle.center.y, customCircle.radius, 0, 2 * Math.PI);
+      ctx.stroke();
 
       ctx.setLineDash([]); // Reset line dash
-    }
-
-    // Draw temporary shape line while drawing polygon
-    if (isDrawingShape && customShape.length > 0 && tempShapePoint && shapeType === 'polygon') {
-      ctx.strokeStyle = '#10b981'; // Lighter green for temp line
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-
-      ctx.beginPath();
-      ctx.moveTo(customShape[customShape.length - 1].x, customShape[customShape.length - 1].y);
-      ctx.lineTo(tempShapePoint.x, tempShapePoint.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // Draw temporary circle while drawing
-    if (isDrawingCircle && circleCenter && tempShapePoint) {
-      const radius = Math.sqrt(
-        Math.pow(tempShapePoint.x - circleCenter.x, 2) +
-        Math.pow(tempShapePoint.y - circleCenter.y, 2)
-      );
-
-      ctx.strokeStyle = '#10b981'; // Lighter green for temp circle
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-
-      ctx.beginPath();
-      ctx.arc(circleCenter.x, circleCenter.y, radius, 0, 2 * Math.PI);
-      ctx.stroke();
-      ctx.setLineDash([]);
     }
 
     // Draw Voronoi diagram
@@ -380,23 +340,9 @@ export default function VoronoiDesigner() {
         ctx.fill();
       });
     }
-  }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, roundedCorners, cornerRadius, strokeWidth, useCustomShape, customShape, customCircle, shapeType, isDrawingShape, isDrawingCircle, circleCenter, tempShapePoint]);
+  }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, roundedCorners, cornerRadius, strokeWidth, useCustomShape, customCircle]);
 
-  // Handle canvas mouse move for shape drawing
-  const handleCanvasMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDrawingShape || isDrawingCircle) {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-
-      setTempShapePoint({ x, y });
-    }
-  };
-
-  // Add point on canvas click or handle shape drawing
+  // Add point on canvas click
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -405,35 +351,7 @@ export default function VoronoiDesigner() {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    if (isDrawingShape && shapeType === 'polygon') {
-      const newPoint = { x, y };
-
-      // Check if clicking near the first point to close the shape
-      if (customShape.length > 2) {
-        const firstPoint = customShape[0];
-        const distance = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
-
-        if (distance < 20) { // Close shape if within 20 pixels of start
-          setIsDrawingShape(false);
-          setTempShapePoint(null);
-          return;
-        }
-      }
-
-      setCustomShape([...customShape, newPoint]);
-    } else if (isDrawingCircle && shapeType === 'circle') {
-      if (!circleCenter) {
-        // First click sets the center
-        setCircleCenter({ x, y });
-      } else {
-        // Second click sets the radius and completes the circle
-        const radius = Math.sqrt(Math.pow(x - circleCenter.x, 2) + Math.pow(y - circleCenter.y, 2));
-        setCustomCircle({ center: circleCenter, radius });
-        setIsDrawingCircle(false);
-        setCircleCenter(null);
-        setTempShapePoint(null);
-      }
-    } else if (!useCustomShape || (useCustomShape && isPointInCustomShape({ x, y }))) {
+    if (!useCustomShape || (useCustomShape && isPointInCustomShape({ x, y }))) {
       // Only add points if not using custom shape, or if point is inside custom shape
       setPoints([...points, { x, y }]);
     }
@@ -444,35 +362,9 @@ export default function VoronoiDesigner() {
     setPoints([]);
   };
 
-  // Start drawing custom shape
-  const startDrawingShape = () => {
-    if (shapeType === 'polygon') {
-      setIsDrawingShape(true);
-      setCustomShape([]);
-    } else if (shapeType === 'circle') {
-      setIsDrawingCircle(true);
-      setCustomCircle(null);
-      setCircleCenter(null);
-    }
-    setTempShapePoint(null);
-  };
-
-  // Clear custom shape
+  // Clear custom circle
   const clearCustomShape = () => {
-    setCustomShape([]);
     setCustomCircle(null);
-    setIsDrawingShape(false);
-    setIsDrawingCircle(false);
-    setCircleCenter(null);
-    setTempShapePoint(null);
-  };
-
-  // Finish drawing shape
-  const finishDrawingShape = () => {
-    setIsDrawingShape(false);
-    setIsDrawingCircle(false);
-    setCircleCenter(null);
-    setTempShapePoint(null);
   };
 
   // Export to DXF
@@ -542,12 +434,22 @@ export default function VoronoiDesigner() {
       });
     }
 
-    // Add custom shape boundary to DXF
-    if (useCustomShape && customShape.length > 2) {
-      for (let i = 0; i < customShape.length; i++) {
-        const start = customShape[i];
-        const end = customShape[(i + 1) % customShape.length];
-        drawing.drawLine(start.x, start.y, end.x, end.y);
+    // Add custom circle boundary to DXF
+    if (useCustomShape && customCircle) {
+      // Draw circle as multiple line segments for DXF compatibility
+      const segments = 64; // Number of segments to approximate circle
+      const angleStep = (2 * Math.PI) / segments;
+
+      for (let i = 0; i < segments; i++) {
+        const angle1 = i * angleStep;
+        const angle2 = ((i + 1) % segments) * angleStep;
+
+        const x1 = customCircle.center.x + customCircle.radius * Math.cos(angle1);
+        const y1 = customCircle.center.y + customCircle.radius * Math.sin(angle1);
+        const x2 = customCircle.center.x + customCircle.radius * Math.cos(angle2);
+        const y2 = customCircle.center.y + customCircle.radius * Math.sin(angle2);
+
+        drawing.drawLine(x1, y1, x2, y2);
       }
     }
 
@@ -714,82 +616,27 @@ export default function VoronoiDesigner() {
               </div>
             )}
 
-            {/* Custom Shape Controls */}
+            {/* Custom Circle Controls */}
             {useCustomShape && (
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">Custom Shape</h3>
-
-                {/* Shape Type Selection */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Shape Type</label>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setShapeType('polygon')}
-                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${shapeType === 'polygon'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                      Polygon
-                    </button>
-                    <button
-                      onClick={() => setShapeType('circle')}
-                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${shapeType === 'circle'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                      Circle
-                    </button>
-                  </div>
-                </div>
+                <h3 className="text-sm font-medium text-gray-700">Custom Circle</h3>
 
                 <div className="space-y-2">
-                  {!isDrawingShape && !isDrawingCircle ? (
-                    <button
-                      onClick={startDrawingShape}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                    >
-                      {shapeType === 'polygon' ? 'Draw New Polygon' : 'Draw New Circle'}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={finishDrawingShape}
-                      className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                    >
-                      Finish Drawing
-                    </button>
-                  )}
-
-                  {((shapeType === 'polygon' && customShape.length > 0) || (shapeType === 'circle' && customCircle)) && (
+                  {customCircle && (
                     <button
                       onClick={clearCustomShape}
                       className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
                     >
-                      Clear Shape
+                      Clear Circle
                     </button>
                   )}
                 </div>
 
                 <div className="text-xs text-gray-500 space-y-1">
-                  {isDrawingShape && shapeType === 'polygon' ? (
-                    <>
-                      <p>• Click to add points to your polygon</p>
-                      <p>• Click near the first point to close</p>
-                      <p>• Or click "Finish Drawing" when done</p>
-                    </>
-                  ) : isDrawingCircle && shapeType === 'circle' ? (
-                    circleCenter ? (
-                      <p>• Click to set the circle radius</p>
-                    ) : (
-                      <p>• Click to set the circle center</p>
-                    )
-                  ) : (shapeType === 'polygon' && customShape.length >= 3) ? (
-                    <p>• Custom polygon active ({customShape.length} points)</p>
-                  ) : (shapeType === 'circle' && customCircle) ? (
+                  {customCircle ? (
                     <p>• Custom circle active (radius: {Math.round(customCircle.radius)}px)</p>
                   ) : (
-                    <p>• Draw a {shapeType} to constrain Voronoi generation</p>
+                    <p>• Circle will be created automatically in the center</p>
                   )}
                 </div>
               </div>
@@ -915,9 +762,7 @@ export default function VoronoiDesigner() {
                 width={canvasSize.width}
                 height={canvasSize.height}
                 onClick={handleCanvasClick}
-                onMouseMove={handleCanvasMouseMove}
-                className={`bg-white w-full block ${isDrawingShape ? 'cursor-crosshair' : 'cursor-crosshair'
-                  }`}
+                className="bg-white w-full block cursor-crosshair"
               />
             </div>
           </div>

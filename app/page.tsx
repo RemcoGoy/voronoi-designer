@@ -20,6 +20,8 @@ export default function VoronoiDesigner() {
   const [showDelaunay, setShowDelaunay] = useState(false);
   const [showDoubleBorder, setShowDoubleBorder] = useState(false);
   const [borderOffset, setBorderOffset] = useState(5);
+  const [roundedCorners, setRoundedCorners] = useState(false);
+  const [cornerRadius, setCornerRadius] = useState(3);
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
 
@@ -78,6 +80,75 @@ export default function VoronoiDesigner() {
         point[1] + normalizedDy * offset
       ];
     });
+  };
+
+  // Helper function to create rounded polygon points
+  const createRoundedPolygonPoints = (polygon: number[][], radius: number): number[][] => {
+    if (!polygon || polygon.length < 3) return polygon;
+
+    const roundedPoints: number[][] = [];
+    const numSegments = 8; // Number of segments per rounded corner
+
+    for (let i = 0; i < polygon.length; i++) {
+      const current = polygon[i];
+      const next = polygon[(i + 1) % polygon.length];
+      const prev = polygon[(i - 1 + polygon.length) % polygon.length];
+
+      // Calculate vectors to adjacent points
+      const toPrev = [prev[0] - current[0], prev[1] - current[1]];
+      const toNext = [next[0] - current[0], next[1] - current[1]];
+
+      // Normalize vectors
+      const prevLength = Math.sqrt(toPrev[0] * toPrev[0] + toPrev[1] * toPrev[1]);
+      const nextLength = Math.sqrt(toNext[0] * toNext[0] + toNext[1] * toNext[1]);
+
+      if (prevLength === 0 || nextLength === 0) {
+        roundedPoints.push(current);
+        continue;
+      }
+
+      const prevNorm = [toPrev[0] / prevLength, toPrev[1] / prevLength];
+      const nextNorm = [toNext[0] / nextLength, toNext[1] / nextLength];
+
+      // Calculate the effective radius (don't exceed half the edge length)
+      const effectiveRadius = Math.min(radius, prevLength / 2, nextLength / 2);
+
+      // Calculate corner points
+      const cornerStart = [
+        current[0] + prevNorm[0] * effectiveRadius,
+        current[1] + prevNorm[1] * effectiveRadius
+      ];
+      const cornerEnd = [
+        current[0] + nextNorm[0] * effectiveRadius,
+        current[1] + nextNorm[1] * effectiveRadius
+      ];
+
+      // Create arc between corner points
+      for (let j = 0; j <= numSegments; j++) {
+        const t = j / numSegments;
+        // Simple linear interpolation for arc approximation
+        const arcPoint = [
+          cornerStart[0] + (cornerEnd[0] - cornerStart[0]) * t,
+          cornerStart[1] + (cornerEnd[1] - cornerStart[1]) * t
+        ];
+
+        // Apply circular arc offset toward the corner center
+        const centerX = (cornerStart[0] + cornerEnd[0]) / 2;
+        const centerY = (cornerStart[1] + cornerEnd[1]) / 2;
+        const toCenter = [current[0] - centerX, current[1] - centerY];
+        const toCenterLength = Math.sqrt(toCenter[0] * toCenter[0] + toCenter[1] * toCenter[1]);
+
+        if (toCenterLength > 0) {
+          const arcFactor = Math.sin(t * Math.PI) * 0.3; // Curve factor
+          arcPoint[0] += (toCenter[0] / toCenterLength) * effectiveRadius * arcFactor;
+          arcPoint[1] += (toCenter[1] / toCenterLength) * effectiveRadius * arcFactor;
+        }
+
+        roundedPoints.push(arcPoint);
+      }
+    }
+
+    return roundedPoints;
   };
 
   // Generate new pattern
@@ -141,7 +212,12 @@ export default function VoronoiDesigner() {
       for (let i = 0; i < points.length; i++) {
         const cell = voronoi.cellPolygon(i);
         if (cell && cell.length > 2) {
-          const insetCell = createInsetPolygon(cell, borderOffset);
+          let insetCell = createInsetPolygon(cell, borderOffset);
+
+          // Apply rounding if enabled
+          if (roundedCorners) {
+            insetCell = createRoundedPolygonPoints(insetCell, cornerRadius);
+          }
 
           ctx.beginPath();
           ctx.moveTo(insetCell[0][0], insetCell[0][1]);
@@ -172,7 +248,7 @@ export default function VoronoiDesigner() {
         ctx.fill();
       });
     }
-  }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, strokeWidth]);
+  }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, roundedCorners, cornerRadius, strokeWidth]);
 
   // Add point on canvas click
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -234,7 +310,12 @@ export default function VoronoiDesigner() {
       for (let i = 0; i < points.length; i++) {
         const cell = voronoi.cellPolygon(i);
         if (cell && cell.length > 2) {
-          const insetCell = createInsetPolygon(cell, borderOffset);
+          let insetCell = createInsetPolygon(cell, borderOffset);
+
+          // Apply rounding if enabled
+          if (roundedCorners) {
+            insetCell = createRoundedPolygonPoints(insetCell, cornerRadius);
+          }
 
           // Create polyline for each inset cell
           for (let j = 0; j < insetCell.length; j++) {
@@ -361,19 +442,48 @@ export default function VoronoiDesigner() {
 
             {/* Border Offset Control */}
             {showDoubleBorder && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Border Offset: {borderOffset}px
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Border Offset: {borderOffset}px
+                  </label>
+                  <input
+                    type="range"
+                    min="2"
+                    max="20"
+                    step="1"
+                    value={borderOffset}
+                    onChange={(e) => setBorderOffset(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={roundedCorners}
+                    onChange={(e) => setRoundedCorners(e.target.checked)}
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Rounded Corners</span>
                 </label>
-                <input
-                  type="range"
-                  min="2"
-                  max="20"
-                  step="1"
-                  value={borderOffset}
-                  onChange={(e) => setBorderOffset(parseInt(e.target.value))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                />
+
+                {roundedCorners && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Corner Radius: {cornerRadius}px
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      step="0.5"
+                      value={cornerRadius}
+                      onChange={(e) => setCornerRadius(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                )}
               </div>
             )}
 

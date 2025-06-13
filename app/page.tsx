@@ -9,34 +9,45 @@ interface Point {
   y: number;
 }
 
+interface JaggedCircle {
+  center: Point;
+  baseRadius: number;
+  jaggedPoints: Point[];
+}
+
 export default function VoronoiDesigner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const [numPoints, setNumPoints] = useState(30);
-  const [showPoints, setShowPoints] = useState(true);
-  const [showVoronoi, setShowVoronoi] = useState(true);
+  const [numPoints, setNumPoints] = useState(25);
+  const [showPoints, setShowPoints] = useState(false);
+  const [showVoronoi, setShowVoronoi] = useState(false);
   const [showDelaunay, setShowDelaunay] = useState(false);
-  const [showDoubleBorder, setShowDoubleBorder] = useState(false);
-  const [borderOffset, setBorderOffset] = useState(5);
+  const [showDoubleBorder, setShowDoubleBorder] = useState(true);
+  const [borderOffset, setBorderOffset] = useState(8);
   const [roundedCorners, setRoundedCorners] = useState(false);
   const [cornerRadius, setCornerRadius] = useState(3);
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
+  const [randomness, setRandomness] = useState(25); // 0 = grid-like, 100 = fully random
 
-  // Custom shape options (circle only)
-  const [useCustomShape, setUseCustomShape] = useState(false);
-  const [customCircle, setCustomCircle] = useState<{ center: Point, radius: number } | null>(null);
+  // Custom shape options (jagged circle)
+  const [useCustomShape, setUseCustomShape] = useState(true);
+  const [customCircle, setCustomCircle] = useState<JaggedCircle | null>(null);
+  const [jaggedness, setJaggedness] = useState(2.5); // 0 = smooth circle, 80 = very jagged (now in whole numbers)
+  const [jaggedPoints, setJaggedPoints] = useState(64); // Number of points around the circle
+  const [boundarySeed, setBoundarySeed] = useState(Date.now());
 
   // Export options
-  const [exportVoronoi, setExportVoronoi] = useState(true);
+  const [exportVoronoi, setExportVoronoi] = useState(false);
   const [exportDelaunay, setExportDelaunay] = useState(false);
   const [exportPoints, setExportPoints] = useState(false);
-  const [exportDoubleBorder, setExportDoubleBorder] = useState(false);
+  const [exportDoubleBorder, setExportDoubleBorder] = useState(true);
+  const [exportBoundary, setExportBoundary] = useState(true);
   const [showExportOptions, setShowExportOptions] = useState(false);
 
-  // Generate random points with seeded randomization
+  // Generate random points with seeded randomization and controllable randomness
   const generateRandomPoints = (count: number, seedValue: number) => {
     // Simple seeded random number generator
     let seededRandom = (function (seed: number) {
@@ -48,24 +59,82 @@ export default function VoronoiDesigner() {
 
     const newPoints: Point[] = [];
     const margin = 20;
+    const effectiveWidth = canvasSize.width - 2 * margin;
+    const effectiveHeight = canvasSize.height - 2 * margin;
     const maxAttempts = count * 10; // Prevent infinite loops
     let attempts = 0;
 
-    for (let i = 0; i < count && attempts < maxAttempts; attempts++) {
-      const point = {
-        x: margin + seededRandom() * (canvasSize.width - 2 * margin),
-        y: margin + seededRandom() * (canvasSize.height - 2 * margin)
-      };
+    // Convert randomness (0-100) to factor (0-1)
+    const randomnessFactor = randomness / 100;
 
-      // If using custom shape, only add points inside the circle
-      if (useCustomShape && customCircle) {
-        if (isPointInCustomShape(point)) {
+    if (randomnessFactor < 0.1) {
+      // Very low randomness: Create a grid pattern with slight variations
+      const cols = Math.ceil(Math.sqrt(count * (effectiveWidth / effectiveHeight)));
+      const rows = Math.ceil(count / cols);
+      const cellWidth = effectiveWidth / cols;
+      const cellHeight = effectiveHeight / rows;
+
+      for (let i = 0; i < count && attempts < maxAttempts; attempts++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+
+        const baseX = margin + col * cellWidth + cellWidth / 2;
+        const baseY = margin + row * cellHeight + cellHeight / 2;
+
+        // Add small random variation
+        const variation = Math.min(cellWidth, cellHeight) * 0.2;
+        const point = {
+          x: baseX + (seededRandom() - 0.5) * variation,
+          y: baseY + (seededRandom() - 0.5) * variation
+        };
+
+        // Check if point is within bounds and custom shape
+        if (point.x >= margin && point.x <= canvasSize.width - margin &&
+          point.y >= margin && point.y <= canvasSize.height - margin &&
+          (!useCustomShape || isPointInCustomShape(point))) {
           newPoints.push(point);
           i++;
         }
-      } else {
-        newPoints.push(point);
-        i++;
+      }
+    } else {
+      // Higher randomness: Blend grid and random positioning
+      const cols = Math.ceil(Math.sqrt(count * (effectiveWidth / effectiveHeight)));
+      const rows = Math.ceil(count / cols);
+      const cellWidth = effectiveWidth / cols;
+      const cellHeight = effectiveHeight / rows;
+
+      for (let i = 0; i < count && attempts < maxAttempts; attempts++) {
+        let point: Point;
+
+        if (seededRandom() < randomnessFactor) {
+          // Fully random placement
+          point = {
+            x: margin + seededRandom() * effectiveWidth,
+            y: margin + seededRandom() * effectiveHeight
+          };
+        } else {
+          // Grid-based with variation
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+
+          const baseX = margin + col * cellWidth + cellWidth / 2;
+          const baseY = margin + row * cellHeight + cellHeight / 2;
+
+          // Variable amount of deviation based on randomness
+          const maxDeviation = Math.min(cellWidth, cellHeight) * randomnessFactor;
+          point = {
+            x: baseX + (seededRandom() - 0.5) * maxDeviation,
+            y: baseY + (seededRandom() - 0.5) * maxDeviation
+          };
+        }
+
+        // Check if point is within bounds and custom shape
+        if (point.x >= margin && point.x <= canvasSize.width - margin &&
+          point.y >= margin && point.y <= canvasSize.height - margin &&
+          (!useCustomShape || isPointInCustomShape(point))) {
+          newPoints.push(point);
+          i++;
+        }
       }
     }
 
@@ -191,10 +260,54 @@ export default function VoronoiDesigner() {
     return distance <= circle.radius;
   };
 
+  // Helper function to generate jagged circle points
+  const generateJaggedCircle = (center: Point, baseRadius: number, jaggedPointCount: number, jaggedness: number, seedValue: number): Point[] => {
+    // Simple seeded random number generator for consistent jagged patterns
+    let seededRandom = (function (seed: number) {
+      return function () {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+      };
+    })(seedValue);
+
+    const jaggedPoints: Point[] = [];
+    const angleStep = (2 * Math.PI) / jaggedPointCount;
+    // Convert jaggedness from 0-80 scale to 0-0.8 scale for calculations
+    const jaggednessFactor = jaggedness / 100;
+
+    for (let i = 0; i < jaggedPointCount; i++) {
+      const angle = i * angleStep;
+      // Add random variation to the radius
+      const radiusVariation = (seededRandom() - 0.5) * 2 * jaggednessFactor * baseRadius;
+      const radius = baseRadius + radiusVariation;
+
+      const x = center.x + radius * Math.cos(angle);
+      const y = center.y + radius * Math.sin(angle);
+
+      jaggedPoints.push({ x, y });
+    }
+
+    return jaggedPoints;
+  };
+
+  // Helper function to check if point is inside jagged circle
+  const isPointInJaggedCircle = (point: Point, jaggedCircle: JaggedCircle): boolean => {
+    if (jaggedCircle.jaggedPoints.length === 0) {
+      // Fallback to regular circle check if no jagged points
+      const dx = point.x - jaggedCircle.center.x;
+      const dy = point.y - jaggedCircle.center.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      return distance <= jaggedCircle.baseRadius;
+    }
+
+    // Use polygon containment check for jagged boundary
+    return isPointInPolygon(point, jaggedCircle.jaggedPoints);
+  };
+
   // Helper function to check if point is inside custom circle
   const isPointInCustomShape = (point: Point): boolean => {
     if (customCircle) {
-      return isPointInCircle(point, customCircle);
+      return isPointInJaggedCircle(point, customCircle);
     }
     return true;
   };
@@ -253,14 +366,42 @@ export default function VoronoiDesigner() {
       const centerX = canvasSize.width / 2;
       const centerY = canvasSize.height / 2;
       const radius = Math.min(canvasSize.width, canvasSize.height) * 0.45; // 90% of smaller dimension
-      setCustomCircle({ center: { x: centerX, y: centerY }, radius });
+      const jaggedPointsArray = generateJaggedCircle(
+        { x: centerX, y: centerY },
+        radius,
+        jaggedPoints,
+        jaggedness,
+        boundarySeed
+      );
+      setCustomCircle({
+        center: { x: centerX, y: centerY },
+        baseRadius: radius,
+        jaggedPoints: jaggedPointsArray
+      });
     }
-  }, [useCustomShape, canvasSize, customCircle]);
+  }, [useCustomShape, canvasSize, customCircle, jaggedness, jaggedPoints, boundarySeed]);
+
+  // Update jagged points when parameters change
+  useEffect(() => {
+    if (useCustomShape && customCircle) {
+      const jaggedPointsArray = generateJaggedCircle(
+        customCircle.center,
+        customCircle.baseRadius,
+        jaggedPoints,
+        jaggedness,
+        boundarySeed
+      );
+      setCustomCircle({
+        ...customCircle,
+        jaggedPoints: jaggedPointsArray
+      });
+    }
+  }, [jaggedness, jaggedPoints, boundarySeed]);
 
   // Initialize with random points
   useEffect(() => {
     generatePattern();
-  }, [numPoints, seed, canvasSize, useCustomShape, customCircle]);
+  }, [numPoints, seed, canvasSize, useCustomShape, customCircle, randomness]);
 
   // Draw on canvas
   useEffect(() => {
@@ -281,8 +422,18 @@ export default function VoronoiDesigner() {
       ctx.setLineDash([5, 5]); // Dashed line
 
       ctx.beginPath();
-      console.log(customCircle.radius)
-      ctx.arc(customCircle.center.x, customCircle.center.y, customCircle.radius, 0, 2 * Math.PI);
+      if (customCircle.jaggedPoints.length > 0) {
+        // Draw jagged boundary
+        ctx.moveTo(customCircle.jaggedPoints[0].x, customCircle.jaggedPoints[0].y);
+        for (let i = 1; i < customCircle.jaggedPoints.length; i++) {
+          ctx.lineTo(customCircle.jaggedPoints[i].x, customCircle.jaggedPoints[i].y);
+        }
+        ctx.closePath();
+      } else {
+        // Fallback to circle if no jagged points
+        console.log(customCircle.baseRadius)
+        ctx.arc(customCircle.center.x, customCircle.center.y, customCircle.baseRadius, 0, 2 * Math.PI);
+      }
       ctx.stroke();
 
       ctx.setLineDash([]); // Reset line dash
@@ -436,21 +587,30 @@ export default function VoronoiDesigner() {
     }
 
     // Add custom circle boundary to DXF
-    if (useCustomShape && customCircle) {
-      // Draw circle as multiple line segments for DXF compatibility
-      const segments = 64; // Number of segments to approximate circle
-      const angleStep = (2 * Math.PI) / segments;
+    if (useCustomShape && customCircle && exportBoundary) {
+      if (customCircle.jaggedPoints.length > 0) {
+        // Draw jagged boundary as connected line segments
+        for (let i = 0; i < customCircle.jaggedPoints.length; i++) {
+          const current = customCircle.jaggedPoints[i];
+          const next = customCircle.jaggedPoints[(i + 1) % customCircle.jaggedPoints.length];
+          drawing.drawLine(current.x, current.y, next.x, next.y);
+        }
+      } else {
+        // Fallback: Draw circle as multiple line segments for DXF compatibility
+        const segments = 64; // Number of segments to approximate circle
+        const angleStep = (2 * Math.PI) / segments;
 
-      for (let i = 0; i < segments; i++) {
-        const angle1 = i * angleStep;
-        const angle2 = ((i + 1) % segments) * angleStep;
+        for (let i = 0; i < segments; i++) {
+          const angle1 = i * angleStep;
+          const angle2 = ((i + 1) % segments) * angleStep;
 
-        const x1 = customCircle.center.x + customCircle.radius * Math.cos(angle1);
-        const y1 = customCircle.center.y + customCircle.radius * Math.sin(angle1);
-        const x2 = customCircle.center.x + customCircle.radius * Math.cos(angle2);
-        const y2 = customCircle.center.y + customCircle.radius * Math.sin(angle2);
+          const x1 = customCircle.center.x + customCircle.baseRadius * Math.cos(angle1);
+          const y1 = customCircle.center.y + customCircle.baseRadius * Math.sin(angle1);
+          const x2 = customCircle.center.x + customCircle.baseRadius * Math.cos(angle2);
+          const y2 = customCircle.center.y + customCircle.baseRadius * Math.sin(angle2);
 
-        drawing.drawLine(x1, y1, x2, y2);
+          drawing.drawLine(x1, y1, x2, y2);
+        }
       }
     }
 
@@ -513,6 +673,33 @@ export default function VoronoiDesigner() {
                 onChange={(e) => setStrokeWidth(parseFloat(e.target.value))}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               />
+            </div>
+
+            {/* Randomness */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Randomness: {randomness}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={randomness}
+                onChange={(e) => setRandomness(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Grid-like</span>
+                <span>Fully Random</span>
+              </div>
+
+              <button
+                onClick={randomizeSeed}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors mt-3"
+              >
+                Randomize Seed
+              </button>
             </div>
 
             {/* Display Options */}
@@ -622,6 +809,46 @@ export default function VoronoiDesigner() {
               <div className="space-y-3">
                 <h3 className="text-sm font-medium text-gray-700">Custom Circle</h3>
 
+                {/* Jaggedness Controls */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Jaggedness: {jaggedness}%
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="80"
+                      step="1"
+                      value={jaggedness}
+                      onChange={(e) => setJaggedness(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Edge Detail: {jaggedPoints} points
+                    </label>
+                    <input
+                      type="range"
+                      min="8"
+                      max="64"
+                      step="4"
+                      value={jaggedPoints}
+                      onChange={(e) => setJaggedPoints(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => setBoundarySeed(Date.now())}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Randomize Boundary
+                  </button>
+                </div>
+
                 <div className="space-y-2">
                   {customCircle && (
                     <button
@@ -635,9 +862,12 @@ export default function VoronoiDesigner() {
 
                 <div className="text-xs text-gray-500 space-y-1">
                   {customCircle ? (
-                    <p>• Custom circle active (radius: {Math.round(customCircle.radius)}px)</p>
+                    <>
+                      <p>• Jagged boundary active (radius: {Math.round(customCircle.baseRadius)}px)</p>
+                      <p>• Jaggedness: {jaggedness}% with {jaggedPoints} edge points</p>
+                    </>
                   ) : (
-                    <p>• Circle will be created automatically in the center</p>
+                    <p>• Jagged boundary will be created automatically</p>
                   )}
                 </div>
               </div>
@@ -650,13 +880,6 @@ export default function VoronoiDesigner() {
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
               >
                 Generate New Pattern
-              </button>
-
-              <button
-                onClick={randomizeSeed}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                Randomize Seed
               </button>
 
               <button
@@ -723,12 +946,22 @@ export default function VoronoiDesigner() {
                       />
                       <span className="ml-2 text-sm text-gray-700">Export Double Border</span>
                     </label>
+
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={exportBoundary}
+                        onChange={(e) => setExportBoundary(e.target.checked)}
+                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Export Boundary</span>
+                    </label>
                   </div>
                 )}
 
                 <button
                   onClick={exportToDXF}
-                  disabled={points.length === 0 || (!exportVoronoi && !exportDelaunay && !exportPoints && !exportDoubleBorder)}
+                  disabled={points.length === 0 || (!exportVoronoi && !exportDelaunay && !exportPoints && !exportDoubleBorder && !exportBoundary)}
                   className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
                 >
                   Export to DXF

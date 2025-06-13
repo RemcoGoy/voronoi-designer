@@ -252,7 +252,7 @@ export default function VoronoiDesigner() {
     if (useCustomShape && !customCircle && canvasSize.width > 0 && canvasSize.height > 0) {
       const centerX = canvasSize.width / 2;
       const centerY = canvasSize.height / 2;
-      const radius = Math.min(canvasSize.width, canvasSize.height) * 0.3; // 30% of smaller dimension
+      const radius = Math.min(canvasSize.width, canvasSize.height) * 0.45; // 90% of smaller dimension
       setCustomCircle({ center: { x: centerX, y: centerY }, radius });
     }
   }, [useCustomShape, canvasSize, customCircle]);
@@ -281,6 +281,7 @@ export default function VoronoiDesigner() {
       ctx.setLineDash([5, 5]); // Dashed line
 
       ctx.beginPath();
+      console.log(customCircle.radius)
       ctx.arc(customCircle.center.x, customCircle.center.y, customCircle.radius, 0, 2 * Math.PI);
       ctx.stroke();
 

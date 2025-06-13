@@ -1,103 +1,336 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useRef, useEffect } from 'react';
+import { Delaunay } from 'd3-delaunay';
+import Drawing from 'dxf-writer';
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+export default function VoronoiDesigner() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [points, setPoints] = useState<Point[]>([]);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const [numPoints, setNumPoints] = useState(50);
+  const [showPoints, setShowPoints] = useState(true);
+  const [showVoronoi, setShowVoronoi] = useState(true);
+  const [showDelaunay, setShowDelaunay] = useState(false);
+  const [strokeWidth, setStrokeWidth] = useState(1);
+  const [seed, setSeed] = useState(Date.now());
+
+  // Generate random points with seeded randomization
+  const generateRandomPoints = (count: number, seedValue: number) => {
+    // Simple seeded random number generator
+    let seededRandom = (function (seed: number) {
+      return function () {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+      };
+    })(seedValue);
+
+    const newPoints: Point[] = [];
+    const margin = 20;
+
+    for (let i = 0; i < count; i++) {
+      newPoints.push({
+        x: margin + seededRandom() * (canvasSize.width - 2 * margin),
+        y: margin + seededRandom() * (canvasSize.height - 2 * margin)
+      });
+    }
+    return newPoints;
+  };
+
+  // Generate new pattern
+  const generatePattern = () => {
+    const randomPoints = generateRandomPoints(numPoints, seed);
+    setPoints(randomPoints);
+  };
+
+  // Update canvas size based on container
+  useEffect(() => {
+    const updateCanvasSize = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.clientWidth - 24; // Account for padding
+        const aspectRatio = 4 / 3; // 4:3 aspect ratio
+        const newHeight = containerWidth / aspectRatio;
+
+        setCanvasSize({
+          width: containerWidth,
+          height: Math.max(400, Math.min(600, newHeight)) // Min 400px, max 600px height
+        });
+      }
+    };
+
+    updateCanvasSize();
+    window.addEventListener('resize', updateCanvasSize);
+
+    return () => window.removeEventListener('resize', updateCanvasSize);
+  }, []);
+
+  // Initialize with random points
+  useEffect(() => {
+    generatePattern();
+  }, [numPoints, seed, canvasSize]);
+
+  // Draw on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || points.length === 0) return;
+
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
+
+    // Create Delaunay triangulation
+    const delaunay = Delaunay.from(points.map(p => [p.x, p.y]));
+    const voronoi = delaunay.voronoi([0, 0, canvasSize.width, canvasSize.height]);
+
+    // Draw Voronoi diagram
+    if (showVoronoi) {
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = strokeWidth;
+      ctx.beginPath();
+      voronoi.render(ctx);
+      ctx.stroke();
+    }
+
+    // Draw Delaunay triangulation
+    if (showDelaunay) {
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = strokeWidth;
+      ctx.beginPath();
+      delaunay.render(ctx);
+      ctx.stroke();
+    }
+
+    // Draw points
+    if (showPoints) {
+      ctx.fillStyle = '#1f2937';
+      points.forEach(point => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+    }
+  }, [points, showPoints, showVoronoi, showDelaunay, strokeWidth]);
+
+  // Add point on canvas click
+  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    setPoints([...points, { x, y }]);
+  };
+
+  // Clear all points
+  const clearPoints = () => {
+    setPoints([]);
+  };
+
+  // Export to DXF
+  const exportToDXF = () => {
+    if (points.length === 0) return;
+
+    const drawing = new Drawing();
+
+    // Create Delaunay triangulation and Voronoi diagram
+    const delaunay = Delaunay.from(points.map(p => [p.x, p.y]));
+    const voronoi = delaunay.voronoi([0, 0, canvasSize.width, canvasSize.height]);
+
+    // Add Voronoi cells to DXF
+    if (showVoronoi) {
+      for (let i = 0; i < points.length; i++) {
+        const cell = voronoi.cellPolygon(i);
+        if (cell && cell.length > 2) {
+          // Create polyline for each cell
+          for (let j = 0; j < cell.length; j++) {
+            const start = cell[j];
+            const end = cell[(j + 1) % cell.length];
+            drawing.drawLine(start[0], start[1], end[0], end[1]);
+          }
+        }
+      }
+    }
+
+    // Add Delaunay triangles to DXF
+    if (showDelaunay) {
+      for (let i = 0; i < delaunay.triangles.length; i += 3) {
+        const p1 = points[delaunay.triangles[i]];
+        const p2 = points[delaunay.triangles[i + 1]];
+        const p3 = points[delaunay.triangles[i + 2]];
+
+        drawing.drawLine(p1.x, p1.y, p2.x, p2.y);
+        drawing.drawLine(p2.x, p2.y, p3.x, p3.y);
+        drawing.drawLine(p3.x, p3.y, p1.x, p1.y);
+      }
+    }
+
+    // Download DXF file
+    const dxfString = drawing.toDxfString();
+    const blob = new Blob([dxfString], { type: 'application/dxf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `voronoi-pattern-${Date.now()}.dxf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Generate new seed
+  const randomizeSeed = () => {
+    setSeed(Date.now());
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8 text-center">
+          Voronoi Pattern Designer
+        </h1>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Controls Panel */}
+          <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
+            <h2 className="text-xl font-semibold text-gray-800">Controls</h2>
+
+            {/* Number of Points */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Number of Points: {numPoints}
+              </label>
+              <input
+                type="range"
+                min="10"
+                max="200"
+                value={numPoints}
+                onChange={(e) => setNumPoints(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Stroke Width */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Line Width: {strokeWidth}px
+              </label>
+              <input
+                type="range"
+                min="0.5"
+                max="5"
+                step="0.5"
+                value={strokeWidth}
+                onChange={(e) => setStrokeWidth(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Display Options */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-gray-700">Display Options</h3>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={showVoronoi}
+                  onChange={(e) => setShowVoronoi(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Show Voronoi</span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={showDelaunay}
+                  onChange={(e) => setShowDelaunay(e.target.checked)}
+                  className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Show Delaunay</span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={showPoints}
+                  onChange={(e) => setShowPoints(e.target.checked)}
+                  className="rounded border-gray-300 text-gray-600 focus:ring-gray-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Show Points</span>
+              </label>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={generatePattern}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Generate New Pattern
+              </button>
+
+              <button
+                onClick={randomizeSeed}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Randomize Seed
+              </button>
+
+              <button
+                onClick={clearPoints}
+                className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Clear All Points
+              </button>
+
+              <button
+                onClick={exportToDXF}
+                disabled={points.length === 0}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Export to DXF
+              </button>
+            </div>
+
+            {/* Instructions */}
+            <div className="text-xs text-gray-500 space-y-1">
+              <p>• Click on the canvas to add points manually</p>
+              <p>• Use the controls to adjust the pattern</p>
+              <p>• Export to DXF for use in CAD software</p>
+            </div>
+          </div>
+
+          {/* Canvas */}
+          <div className="lg:col-span-3 bg-white rounded-lg shadow-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">Pattern Preview</h2>
+              <div className="text-sm text-gray-500">
+                {points.length} points • Click to add more
+              </div>
+            </div>
+
+            <div
+              ref={containerRef}
+              className="border-2 border-gray-200 rounded-lg overflow-hidden"
+            >
+              <canvas
+                ref={canvasRef}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                onClick={handleCanvasClick}
+                className="cursor-crosshair bg-white w-full block"
+              />
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
     </div>
   );
 }

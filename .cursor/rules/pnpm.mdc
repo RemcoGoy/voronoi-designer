@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Always use `pnpm` instead of `npm`.
+
+E.g.
+Use `pnpm install`
+Use `pnpm dev`
+Do this for all `npm` commands

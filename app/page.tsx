@@ -18,6 +18,8 @@ export default function VoronoiDesigner() {
   const [showPoints, setShowPoints] = useState(true);
   const [showVoronoi, setShowVoronoi] = useState(true);
   const [showDelaunay, setShowDelaunay] = useState(false);
+  const [showDoubleBorder, setShowDoubleBorder] = useState(false);
+  const [borderOffset, setBorderOffset] = useState(5);
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
 
@@ -25,6 +27,7 @@ export default function VoronoiDesigner() {
   const [exportVoronoi, setExportVoronoi] = useState(true);
   const [exportDelaunay, setExportDelaunay] = useState(false);
   const [exportPoints, setExportPoints] = useState(false);
+  const [exportDoubleBorder, setExportDoubleBorder] = useState(false);
   const [showExportOptions, setShowExportOptions] = useState(false);
 
   // Generate random points with seeded randomization
@@ -47,6 +50,34 @@ export default function VoronoiDesigner() {
       });
     }
     return newPoints;
+  };
+
+  // Helper function to create inset polygon
+  const createInsetPolygon = (polygon: number[][], offset: number): number[][] => {
+    if (!polygon || polygon.length < 3) return polygon;
+
+    // Calculate centroid
+    const centroid = polygon.reduce(
+      (acc, point) => [acc[0] + point[0], acc[1] + point[1]],
+      [0, 0]
+    ).map(coord => coord / polygon.length);
+
+    // Create inset polygon by moving each vertex toward centroid
+    return polygon.map(point => {
+      const dx = centroid[0] - point[0];
+      const dy = centroid[1] - point[1];
+      const length = Math.sqrt(dx * dx + dy * dy);
+
+      if (length === 0) return point;
+
+      const normalizedDx = dx / length;
+      const normalizedDy = dy / length;
+
+      return [
+        point[0] + normalizedDx * offset,
+        point[1] + normalizedDy * offset
+      ];
+    });
   };
 
   // Generate new pattern
@@ -102,6 +133,27 @@ export default function VoronoiDesigner() {
       ctx.stroke();
     }
 
+    // Draw double border (inset Voronoi cells)
+    if (showDoubleBorder) {
+      ctx.strokeStyle = '#1d4ed8'; // Slightly darker blue for inner border
+      ctx.lineWidth = strokeWidth;
+
+      for (let i = 0; i < points.length; i++) {
+        const cell = voronoi.cellPolygon(i);
+        if (cell && cell.length > 2) {
+          const insetCell = createInsetPolygon(cell, borderOffset);
+
+          ctx.beginPath();
+          ctx.moveTo(insetCell[0][0], insetCell[0][1]);
+          for (let j = 1; j < insetCell.length; j++) {
+            ctx.lineTo(insetCell[j][0], insetCell[j][1]);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+    }
+
     // Draw Delaunay triangulation
     if (showDelaunay) {
       ctx.strokeStyle = '#dc2626';
@@ -120,7 +172,7 @@ export default function VoronoiDesigner() {
         ctx.fill();
       });
     }
-  }, [points, showPoints, showVoronoi, showDelaunay, strokeWidth]);
+  }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, strokeWidth]);
 
   // Add point on canvas click
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -174,6 +226,23 @@ export default function VoronoiDesigner() {
         drawing.drawLine(p1.x, p1.y, p2.x, p2.y);
         drawing.drawLine(p2.x, p2.y, p3.x, p3.y);
         drawing.drawLine(p3.x, p3.y, p1.x, p1.y);
+      }
+    }
+
+    // Add double border (inset Voronoi cells) to DXF
+    if (exportDoubleBorder) {
+      for (let i = 0; i < points.length; i++) {
+        const cell = voronoi.cellPolygon(i);
+        if (cell && cell.length > 2) {
+          const insetCell = createInsetPolygon(cell, borderOffset);
+
+          // Create polyline for each inset cell
+          for (let j = 0; j < insetCell.length; j++) {
+            const start = insetCell[j];
+            const end = insetCell[(j + 1) % insetCell.length];
+            drawing.drawLine(start[0], start[1], end[0], end[1]);
+          }
+        }
       }
     }
 
@@ -278,7 +347,35 @@ export default function VoronoiDesigner() {
                 />
                 <span className="ml-2 text-sm text-gray-700">Show Points</span>
               </label>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={showDoubleBorder}
+                  onChange={(e) => setShowDoubleBorder(e.target.checked)}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Double Border</span>
+              </label>
             </div>
+
+            {/* Border Offset Control */}
+            {showDoubleBorder && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Border Offset: {borderOffset}px
+                </label>
+                <input
+                  type="range"
+                  min="2"
+                  max="20"
+                  step="1"
+                  value={borderOffset}
+                  onChange={(e) => setBorderOffset(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="space-y-3">
@@ -350,12 +447,22 @@ export default function VoronoiDesigner() {
                       />
                       <span className="ml-2 text-sm text-gray-700">Export Points</span>
                     </label>
+
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={exportDoubleBorder}
+                        onChange={(e) => setExportDoubleBorder(e.target.checked)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Export Double Border</span>
+                    </label>
                   </div>
                 )}
 
                 <button
                   onClick={exportToDXF}
-                  disabled={points.length === 0 || (!exportVoronoi && !exportDelaunay && !exportPoints)}
+                  disabled={points.length === 0 || (!exportVoronoi && !exportDelaunay && !exportPoints && !exportDoubleBorder)}
                   className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
                 >
                   Export to DXF

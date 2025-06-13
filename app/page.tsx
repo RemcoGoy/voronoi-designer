@@ -14,12 +14,18 @@ export default function VoronoiDesigner() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const [numPoints, setNumPoints] = useState(50);
+  const [numPoints, setNumPoints] = useState(30);
   const [showPoints, setShowPoints] = useState(true);
   const [showVoronoi, setShowVoronoi] = useState(true);
   const [showDelaunay, setShowDelaunay] = useState(false);
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
+
+  // Export options
+  const [exportVoronoi, setExportVoronoi] = useState(true);
+  const [exportDelaunay, setExportDelaunay] = useState(false);
+  const [exportPoints, setExportPoints] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
 
   // Generate random points with seeded randomization
   const generateRandomPoints = (count: number, seedValue: number) => {
@@ -144,7 +150,7 @@ export default function VoronoiDesigner() {
     const voronoi = delaunay.voronoi([0, 0, canvasSize.width, canvasSize.height]);
 
     // Add Voronoi cells to DXF
-    if (showVoronoi) {
+    if (exportVoronoi) {
       for (let i = 0; i < points.length; i++) {
         const cell = voronoi.cellPolygon(i);
         if (cell && cell.length > 2) {
@@ -159,7 +165,7 @@ export default function VoronoiDesigner() {
     }
 
     // Add Delaunay triangles to DXF
-    if (showDelaunay) {
+    if (exportDelaunay) {
       for (let i = 0; i < delaunay.triangles.length; i += 3) {
         const p1 = points[delaunay.triangles[i]];
         const p2 = points[delaunay.triangles[i + 1]];
@@ -169,6 +175,13 @@ export default function VoronoiDesigner() {
         drawing.drawLine(p2.x, p2.y, p3.x, p3.y);
         drawing.drawLine(p3.x, p3.y, p1.x, p1.y);
       }
+    }
+
+    // Add points to DXF
+    if (exportPoints) {
+      points.forEach(point => {
+        drawing.drawPoint(point.x, point.y);
+      });
     }
 
     // Download DXF file
@@ -290,13 +303,64 @@ export default function VoronoiDesigner() {
                 Clear All Points
               </button>
 
-              <button
-                onClick={exportToDXF}
-                disabled={points.length === 0}
-                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                Export to DXF
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => setShowExportOptions(!showExportOptions)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-between"
+                >
+                  <span>Export Options</span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showExportOptions ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showExportOptions && (
+                  <div className="space-y-3 p-3 bg-gray-50 rounded-lg border">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={exportVoronoi}
+                        onChange={(e) => setExportVoronoi(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Export Voronoi Lines</span>
+                    </label>
+
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={exportDelaunay}
+                        onChange={(e) => setExportDelaunay(e.target.checked)}
+                        className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Export Delaunay Lines</span>
+                    </label>
+
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={exportPoints}
+                        onChange={(e) => setExportPoints(e.target.checked)}
+                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Export Points</span>
+                    </label>
+                  </div>
+                )}
+
+                <button
+                  onClick={exportToDXF}
+                  disabled={points.length === 0 || (!exportVoronoi && !exportDelaunay && !exportPoints)}
+                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                >
+                  Export to DXF
+                </button>
+              </div>
             </div>
 
             {/* Instructions */}

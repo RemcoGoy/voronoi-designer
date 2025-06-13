@@ -26,11 +26,9 @@ export default function VoronoiDesigner() {
   const [showDelaunay, setShowDelaunay] = useState(false);
   const [showDoubleBorder, setShowDoubleBorder] = useState(true);
   const [borderOffset, setBorderOffset] = useState(8);
-  const [roundedCorners, setRoundedCorners] = useState(false);
-  const [cornerRadius, setCornerRadius] = useState(3);
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
-  const [randomness, setRandomness] = useState(25); // 0 = grid-like, 100 = fully random
+  const [randomness, setRandomness] = useState(65); // 0 = grid-like, 100 = fully random
 
   // Custom shape options (jagged circle)
   const [useCustomShape, setUseCustomShape] = useState(true);
@@ -46,6 +44,7 @@ export default function VoronoiDesigner() {
   const [exportDoubleBorder, setExportDoubleBorder] = useState(true);
   const [exportBoundary, setExportBoundary] = useState(true);
   const [showExportOptions, setShowExportOptions] = useState(false);
+  const [circleDiameterMM, setCircleDiameterMM] = useState(100); // Diameter in millimeters
 
   // Generate random points with seeded randomization and controllable randomness
   const generateRandomPoints = (count: number, seedValue: number) => {
@@ -169,74 +168,7 @@ export default function VoronoiDesigner() {
     });
   };
 
-  // Helper function to create rounded polygon points
-  const createRoundedPolygonPoints = (polygon: number[][], radius: number): number[][] => {
-    if (!polygon || polygon.length < 3) return polygon;
 
-    const roundedPoints: number[][] = [];
-    const numSegments = 8; // Number of segments per rounded corner
-
-    for (let i = 0; i < polygon.length; i++) {
-      const current = polygon[i];
-      const next = polygon[(i + 1) % polygon.length];
-      const prev = polygon[(i - 1 + polygon.length) % polygon.length];
-
-      // Calculate vectors to adjacent points
-      const toPrev = [prev[0] - current[0], prev[1] - current[1]];
-      const toNext = [next[0] - current[0], next[1] - current[1]];
-
-      // Normalize vectors
-      const prevLength = Math.sqrt(toPrev[0] * toPrev[0] + toPrev[1] * toPrev[1]);
-      const nextLength = Math.sqrt(toNext[0] * toNext[0] + toNext[1] * toNext[1]);
-
-      if (prevLength === 0 || nextLength === 0) {
-        roundedPoints.push(current);
-        continue;
-      }
-
-      const prevNorm = [toPrev[0] / prevLength, toPrev[1] / prevLength];
-      const nextNorm = [toNext[0] / nextLength, toNext[1] / nextLength];
-
-      // Calculate the effective radius (don't exceed half the edge length)
-      const effectiveRadius = Math.min(radius, prevLength / 2, nextLength / 2);
-
-      // Calculate corner points
-      const cornerStart = [
-        current[0] + prevNorm[0] * effectiveRadius,
-        current[1] + prevNorm[1] * effectiveRadius
-      ];
-      const cornerEnd = [
-        current[0] + nextNorm[0] * effectiveRadius,
-        current[1] + nextNorm[1] * effectiveRadius
-      ];
-
-      // Create arc between corner points
-      for (let j = 0; j <= numSegments; j++) {
-        const t = j / numSegments;
-        // Simple linear interpolation for arc approximation
-        const arcPoint = [
-          cornerStart[0] + (cornerEnd[0] - cornerStart[0]) * t,
-          cornerStart[1] + (cornerEnd[1] - cornerStart[1]) * t
-        ];
-
-        // Apply circular arc offset toward the corner center
-        const centerX = (cornerStart[0] + cornerEnd[0]) / 2;
-        const centerY = (cornerStart[1] + cornerEnd[1]) / 2;
-        const toCenter = [current[0] - centerX, current[1] - centerY];
-        const toCenterLength = Math.sqrt(toCenter[0] * toCenter[0] + toCenter[1] * toCenter[1]);
-
-        if (toCenterLength > 0) {
-          const arcFactor = Math.sin(t * Math.PI) * 0.3; // Curve factor
-          arcPoint[0] += (toCenter[0] / toCenterLength) * effectiveRadius * arcFactor;
-          arcPoint[1] += (toCenter[1] / toCenterLength) * effectiveRadius * arcFactor;
-        }
-
-        roundedPoints.push(arcPoint);
-      }
-    }
-
-    return roundedPoints;
-  };
 
   // Helper function to check if point is inside polygon
   const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
@@ -456,12 +388,7 @@ export default function VoronoiDesigner() {
       for (let i = 0; i < points.length; i++) {
         const cell = voronoi.cellPolygon(i);
         if (cell && cell.length > 2) {
-          let insetCell = createInsetPolygon(cell, borderOffset);
-
-          // Apply rounding if enabled
-          if (roundedCorners) {
-            insetCell = createRoundedPolygonPoints(insetCell, cornerRadius);
-          }
+          const insetCell = createInsetPolygon(cell, borderOffset);
 
           ctx.beginPath();
           ctx.moveTo(insetCell[0][0], insetCell[0][1]);
@@ -492,7 +419,7 @@ export default function VoronoiDesigner() {
         ctx.fill();
       });
     }
-  }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, roundedCorners, cornerRadius, strokeWidth, useCustomShape, customCircle]);
+  }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, strokeWidth, useCustomShape, customCircle]);
 
   // Add point on canvas click
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -525,6 +452,17 @@ export default function VoronoiDesigner() {
 
     const drawing = new Drawing();
 
+    // Calculate scale factor to convert pixels to millimeters
+    // Scale based on the custom circle diameter if it exists
+    let scaleFactor = 1;
+    if (useCustomShape && customCircle) {
+      const currentDiameterPixels = customCircle.baseRadius * 2;
+      scaleFactor = circleDiameterMM / currentDiameterPixels;
+    }
+
+    // Helper function to scale coordinates
+    const scaleCoord = (coord: number) => coord * scaleFactor;
+
     // Create Delaunay triangulation and Voronoi diagram
     const delaunay = Delaunay.from(points.map(p => [p.x, p.y]));
     const voronoi = delaunay.voronoi([0, 0, canvasSize.width, canvasSize.height]);
@@ -538,7 +476,7 @@ export default function VoronoiDesigner() {
           for (let j = 0; j < cell.length; j++) {
             const start = cell[j];
             const end = cell[(j + 1) % cell.length];
-            drawing.drawLine(start[0], start[1], end[0], end[1]);
+            drawing.drawLine(scaleCoord(start[0]), scaleCoord(start[1]), scaleCoord(end[0]), scaleCoord(end[1]));
           }
         }
       }
@@ -551,9 +489,9 @@ export default function VoronoiDesigner() {
         const p2 = points[delaunay.triangles[i + 1]];
         const p3 = points[delaunay.triangles[i + 2]];
 
-        drawing.drawLine(p1.x, p1.y, p2.x, p2.y);
-        drawing.drawLine(p2.x, p2.y, p3.x, p3.y);
-        drawing.drawLine(p3.x, p3.y, p1.x, p1.y);
+        drawing.drawLine(scaleCoord(p1.x), scaleCoord(p1.y), scaleCoord(p2.x), scaleCoord(p2.y));
+        drawing.drawLine(scaleCoord(p2.x), scaleCoord(p2.y), scaleCoord(p3.x), scaleCoord(p3.y));
+        drawing.drawLine(scaleCoord(p3.x), scaleCoord(p3.y), scaleCoord(p1.x), scaleCoord(p1.y));
       }
     }
 
@@ -562,18 +500,13 @@ export default function VoronoiDesigner() {
       for (let i = 0; i < points.length; i++) {
         const cell = voronoi.cellPolygon(i);
         if (cell && cell.length > 2) {
-          let insetCell = createInsetPolygon(cell, borderOffset);
-
-          // Apply rounding if enabled
-          if (roundedCorners) {
-            insetCell = createRoundedPolygonPoints(insetCell, cornerRadius);
-          }
+          const insetCell = createInsetPolygon(cell, borderOffset);
 
           // Create polyline for each inset cell
           for (let j = 0; j < insetCell.length; j++) {
             const start = insetCell[j];
             const end = insetCell[(j + 1) % insetCell.length];
-            drawing.drawLine(start[0], start[1], end[0], end[1]);
+            drawing.drawLine(scaleCoord(start[0]), scaleCoord(start[1]), scaleCoord(end[0]), scaleCoord(end[1]));
           }
         }
       }
@@ -582,7 +515,7 @@ export default function VoronoiDesigner() {
     // Add points to DXF
     if (exportPoints) {
       points.forEach(point => {
-        drawing.drawPoint(point.x, point.y);
+        drawing.drawPoint(scaleCoord(point.x), scaleCoord(point.y));
       });
     }
 
@@ -593,7 +526,7 @@ export default function VoronoiDesigner() {
         for (let i = 0; i < customCircle.jaggedPoints.length; i++) {
           const current = customCircle.jaggedPoints[i];
           const next = customCircle.jaggedPoints[(i + 1) % customCircle.jaggedPoints.length];
-          drawing.drawLine(current.x, current.y, next.x, next.y);
+          drawing.drawLine(scaleCoord(current.x), scaleCoord(current.y), scaleCoord(next.x), scaleCoord(next.y));
         }
       } else {
         // Fallback: Draw circle as multiple line segments for DXF compatibility
@@ -609,7 +542,7 @@ export default function VoronoiDesigner() {
           const x2 = customCircle.center.x + customCircle.baseRadius * Math.cos(angle2);
           const y2 = customCircle.center.y + customCircle.baseRadius * Math.sin(angle2);
 
-          drawing.drawLine(x1, y1, x2, y2);
+          drawing.drawLine(scaleCoord(x1), scaleCoord(y1), scaleCoord(x2), scaleCoord(y2));
         }
       }
     }
@@ -775,32 +708,7 @@ export default function VoronoiDesigner() {
                   />
                 </div>
 
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={roundedCorners}
-                    onChange={(e) => setRoundedCorners(e.target.checked)}
-                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Rounded Corners</span>
-                </label>
 
-                {roundedCorners && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Corner Radius: {cornerRadius}px
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      step="0.5"
-                      value={cornerRadius}
-                      onChange={(e) => setCornerRadius(parseFloat(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-                )}
               </div>
             )}
 
@@ -907,6 +815,25 @@ export default function VoronoiDesigner() {
 
                 {showExportOptions && (
                   <div className="space-y-3 p-3 bg-gray-50 rounded-lg border">
+                    {/* Circle Diameter Control */}
+                    {useCustomShape && customCircle && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Circle Diameter (mm)
+                        </label>
+                        <input
+                          type="number"
+                          min="10"
+                          max="500"
+                          step="5"
+                          value={circleDiameterMM}
+                          onChange={(e) => setCircleDiameterMM(parseInt(e.target.value) || 100)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Enter diameter in mm"
+                        />
+                      </div>
+                    )}
+
                     <label className="flex items-center">
                       <input
                         type="checkbox"

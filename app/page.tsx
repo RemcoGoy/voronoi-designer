@@ -46,15 +46,17 @@ export default function VoronoiDesigner() {
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [circleDiameterMM, setCircleDiameterMM] = useState(100); // Diameter in millimeters
 
+  const seedFunction = (seed: number) => {
+    return function () {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+  }
+
   // Generate random points with seeded randomization and controllable randomness
   const generateRandomPoints = (count: number, seedValue: number) => {
     // Simple seeded random number generator
-    let seededRandom = (function (seed: number) {
-      return function () {
-        seed = (seed * 9301 + 49297) % 233280;
-        return seed / 233280;
-      };
-    })(seedValue);
+    const seededRandom = seedFunction(seedValue);
 
     const newPoints: Point[] = [];
     const margin = 20;
@@ -184,23 +186,10 @@ export default function VoronoiDesigner() {
     return inside;
   };
 
-  // Helper function to check if point is inside circle
-  const isPointInCircle = (point: Point, circle: { center: Point, radius: number }): boolean => {
-    const dx = point.x - circle.center.x;
-    const dy = point.y - circle.center.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    return distance <= circle.radius;
-  };
-
   // Helper function to generate jagged circle points
   const generateJaggedCircle = (center: Point, baseRadius: number, jaggedPointCount: number, jaggedness: number, seedValue: number): Point[] => {
     // Simple seeded random number generator for consistent jagged patterns
-    let seededRandom = (function (seed: number) {
-      return function () {
-        seed = (seed * 9301 + 49297) % 233280;
-        return seed / 233280;
-      };
-    })(seedValue);
+    const seededRandom = seedFunction(seedValue);
 
     const jaggedPoints: Point[] = [];
     const angleStep = (2 * Math.PI) / jaggedPointCount;
@@ -242,27 +231,6 @@ export default function VoronoiDesigner() {
       return isPointInJaggedCircle(point, customCircle);
     }
     return true;
-  };
-
-  // Helper function to clip line to polygon boundary
-  const clipLineToPolygon = (start: number[], end: number[], polygon: Point[]): number[][] => {
-    if (polygon.length < 3) return [start, end];
-
-    // Simple implementation - just return the line if both endpoints are inside
-    const startPoint = { x: start[0], y: start[1] };
-    const endPoint = { x: end[0], y: end[1] };
-
-    const startInside = isPointInPolygon(startPoint, polygon);
-    const endInside = isPointInPolygon(endPoint, polygon);
-
-    if (startInside && endInside) {
-      return [start, end];
-    } else if (!startInside && !endInside) {
-      return []; // Both outside, skip line
-    }
-
-    // For now, return the line - more sophisticated clipping can be added later
-    return [start, end];
   };
 
   // Generate new pattern
@@ -311,6 +279,7 @@ export default function VoronoiDesigner() {
         jaggedPoints: jaggedPointsArray
       });
     }
+    // eslint-disable-next-line
   }, [useCustomShape, canvasSize, customCircle, jaggedness, jaggedPoints, boundarySeed]);
 
   // Update jagged points when parameters change
@@ -328,11 +297,13 @@ export default function VoronoiDesigner() {
         jaggedPoints: jaggedPointsArray
       });
     }
-  }, [jaggedness, jaggedPoints, boundarySeed]);
+    // eslint-disable-next-line
+  }, [jaggedness, jaggedPoints, boundarySeed, customCircle, useCustomShape]);
 
   // Initialize with random points
   useEffect(() => {
     generatePattern();
+    // eslint-disable-next-line
   }, [numPoints, seed, canvasSize, useCustomShape, customCircle, randomness]);
 
   // Draw on canvas
@@ -419,6 +390,7 @@ export default function VoronoiDesigner() {
         ctx.fill();
       });
     }
+    // eslint-disable-next-line
   }, [points, showPoints, showVoronoi, showDelaunay, showDoubleBorder, borderOffset, strokeWidth, useCustomShape, customCircle]);
 
   // Add point on canvas click
@@ -899,7 +871,7 @@ export default function VoronoiDesigner() {
             {/* Instructions */}
             <div className="text-xs text-gray-500 space-y-1">
               <p>• Click on the canvas to add points manually</p>
-              <p>• Enable "Custom Boundary" to draw constraint shapes</p>
+                <p>• Enable &quot;Custom Boundary&quot; to draw constraint shapes</p>
               <p>• Use the controls to adjust the pattern</p>
               <p>• Export to DXF for use in CAD software</p>
             </div>

@@ -269,12 +269,15 @@ export default function VoronoiDesigner() {
     return () => window.removeEventListener('resize', updateCanvasSize);
   }, []);
 
-  // Create default circle when boundary is enabled
+  // Create default circle when boundary is enabled or canvas size changes
   useEffect(() => {
-    if (useCustomShape && !customCircle && canvasSize.width > 0 && canvasSize.height > 0) {
+    if (useCustomShape && canvasSize.width > 0 && canvasSize.height > 0) {
+      // Always calculate exact center
       const centerX = canvasSize.width / 2;
       const centerY = canvasSize.height / 2;
-      const radius = Math.min(canvasSize.width, canvasSize.height) * 0.45; // 90% of smaller dimension
+      // Use a slightly smaller radius to ensure it fits well within canvas bounds
+      const radius = Math.min(canvasSize.width, canvasSize.height) * 0.45; // 80% of smaller dimension
+
       const jaggedPointsArray = generateJaggedCircle(
         { x: centerX, y: centerY },
         radius,
@@ -282,6 +285,7 @@ export default function VoronoiDesigner() {
         jaggedness,
         boundarySeed
       );
+
       setCustomCircle({
         center: { x: centerX, y: centerY },
         baseRadius: radius,
@@ -290,11 +294,15 @@ export default function VoronoiDesigner() {
     }
   }, [useCustomShape, canvasSize.width, canvasSize.height, jaggedness, jaggedPoints, boundarySeed]);
 
-  // Update jagged points when parameters change
+  // Update jagged points when parameters change (but keep center position fixed)
   useEffect(() => {
     if (useCustomShape && customCircle) {
+      // Ensure center is always perfectly centered on canvas
+      const centerX = canvasSize.width / 2;
+      const centerY = canvasSize.height / 2;
+
       const jaggedPointsArray = generateJaggedCircle(
-        customCircle.center,
+        { x: centerX, y: centerY },
         customCircle.baseRadius,
         jaggedPoints,
         jaggedness,
@@ -302,10 +310,11 @@ export default function VoronoiDesigner() {
       );
       setCustomCircle(prevCircle => prevCircle ? {
         ...prevCircle,
+        center: { x: centerX, y: centerY }, // Always use exact center
         jaggedPoints: jaggedPointsArray
       } : null);
     }
-  }, [jaggedness, jaggedPoints, boundarySeed, useCustomShape]);
+  }, [jaggedness, jaggedPoints, boundarySeed, useCustomShape, canvasSize.width, canvasSize.height]);
 
   // Initialize with random points
   useEffect(() => {

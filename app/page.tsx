@@ -279,8 +279,7 @@ export default function VoronoiDesigner() {
         jaggedPoints: jaggedPointsArray
       });
     }
-    // eslint-disable-next-line
-  }, [useCustomShape, canvasSize, customCircle, jaggedness, jaggedPoints, boundarySeed]);
+  }, [useCustomShape, canvasSize.width, canvasSize.height, jaggedness, jaggedPoints, boundarySeed]);
 
   // Update jagged points when parameters change
   useEffect(() => {
@@ -292,19 +291,17 @@ export default function VoronoiDesigner() {
         jaggedness,
         boundarySeed
       );
-      setCustomCircle({
-        ...customCircle,
+      setCustomCircle(prevCircle => prevCircle ? {
+        ...prevCircle,
         jaggedPoints: jaggedPointsArray
-      });
+      } : null);
     }
-    // eslint-disable-next-line
-  }, [jaggedness, jaggedPoints, boundarySeed, customCircle, useCustomShape]);
+  }, [jaggedness, jaggedPoints, boundarySeed, useCustomShape]);
 
   // Initialize with random points
   useEffect(() => {
     generatePattern();
-    // eslint-disable-next-line
-  }, [numPoints, seed, canvasSize, useCustomShape, customCircle, randomness]);
+  }, [numPoints, seed, canvasSize.width, canvasSize.height, useCustomShape, randomness]);
 
   // Draw on canvas
   useEffect(() => {
@@ -871,7 +868,7 @@ export default function VoronoiDesigner() {
             {/* Instructions */}
             <div className="text-xs text-gray-500 space-y-1">
               <p>• Click on the canvas to add points manually</p>
-                <p>• Enable &quot;Custom Boundary&quot; to draw constraint shapes</p>
+              <p>• Enable &quot;Custom Boundary&quot; to draw constraint shapes</p>
               <p>• Use the controls to adjust the pattern</p>
               <p>• Export to DXF for use in CAD software</p>
             </div>

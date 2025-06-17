@@ -65,17 +65,25 @@ export default function VoronoiDesigner() {
     const maxAttempts = count * 10; // Prevent infinite loops
     let attempts = 0;
 
+    // Always start with a center point
+    const centerPoint: Point = {
+      x: useCustomShape && customCircle ? customCircle.center.x : canvasSize.width / 2,
+      y: useCustomShape && customCircle ? customCircle.center.y : canvasSize.height / 2
+    };
+    newPoints.push(centerPoint);
+
     // Convert randomness (0-100) to factor (0-1)
     const randomnessFactor = randomness / 100;
 
     if (randomnessFactor < 0.1) {
       // Very low randomness: Create a grid pattern with slight variations
-      const cols = Math.ceil(Math.sqrt(count * (effectiveWidth / effectiveHeight)));
-      const rows = Math.ceil(count / cols);
+      const remainingCount = count - 1; // Subtract 1 for the center point we already added
+      const cols = Math.ceil(Math.sqrt(remainingCount * (effectiveWidth / effectiveHeight)));
+      const rows = Math.ceil(remainingCount / cols);
       const cellWidth = effectiveWidth / cols;
       const cellHeight = effectiveHeight / rows;
 
-      for (let i = 0; i < count && attempts < maxAttempts; attempts++) {
+      for (let i = 0; i < remainingCount && attempts < maxAttempts; attempts++) {
         const col = i % cols;
         const row = Math.floor(i / cols);
 
@@ -99,12 +107,13 @@ export default function VoronoiDesigner() {
       }
     } else {
       // Higher randomness: Blend grid and random positioning
-      const cols = Math.ceil(Math.sqrt(count * (effectiveWidth / effectiveHeight)));
-      const rows = Math.ceil(count / cols);
+      const remainingCount = count - 1; // Subtract 1 for the center point we already added
+      const cols = Math.ceil(Math.sqrt(remainingCount * (effectiveWidth / effectiveHeight)));
+      const rows = Math.ceil(remainingCount / cols);
       const cellWidth = effectiveWidth / cols;
       const cellHeight = effectiveHeight / rows;
 
-      for (let i = 0; i < count && attempts < maxAttempts; attempts++) {
+      for (let i = 0; i < remainingCount && attempts < maxAttempts; attempts++) {
         let point: Point;
 
         if (seededRandom() < randomnessFactor) {

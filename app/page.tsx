@@ -25,7 +25,7 @@ export default function VoronoiDesigner() {
   const [showVoronoi, setShowVoronoi] = useState(false);
   const [showDelaunay, setShowDelaunay] = useState(false);
   const [showDoubleBorder, setShowDoubleBorder] = useState(true);
-  const [borderOffset, setBorderOffset] = useState(8);
+  const [borderOffset, setBorderOffset] = useState(18);
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
   const [randomness, setRandomness] = useState(65); // 0 = grid-like, 100 = fully random
@@ -45,6 +45,11 @@ export default function VoronoiDesigner() {
   const [exportBoundary, setExportBoundary] = useState(true);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [circleDiameterMM, setCircleDiameterMM] = useState(100); // Diameter in millimeters
+
+  // UI state
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [showDisplaySettings, setShowDisplaySettings] = useState(false);
+  const [showBoundarySettings, setShowBoundarySettings] = useState(false);
 
   const seedFunction = (seed: number) => {
     return function () {
@@ -423,11 +428,6 @@ export default function VoronoiDesigner() {
     }
   };
 
-  // Clear all points
-  const clearPoints = () => {
-    setPoints([]);
-  };
-
   // Clear custom circle
   const clearCustomShape = () => {
     setCustomCircle(null);
@@ -562,265 +562,288 @@ export default function VoronoiDesigner() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Controls Panel */}
           <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
-            <h2 className="text-xl font-semibold text-gray-800">Controls</h2>
+            <h2 className="text-xl font-semibold text-gray-800">Quick Controls</h2>
 
-            {/* Number of Points */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Number of Points: {numPoints}
-              </label>
-              <input
-                type="range"
-                min="10"
-                max="200"
-                value={numPoints}
-                onChange={(e) => setNumPoints(parseInt(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
-
-            {/* Stroke Width */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Line Width: {strokeWidth}px
-              </label>
-              <input
-                type="range"
-                min="0.5"
-                max="5"
-                step="0.5"
-                value={strokeWidth}
-                onChange={(e) => setStrokeWidth(parseFloat(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
-
-            {/* Randomness */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Randomness: {randomness}%
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={randomness}
-                onChange={(e) => setRandomness(parseInt(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>Grid-like</span>
-                <span>Fully Random</span>
+            {/* Essential Controls */}
+            <div className="space-y-4">
+              {/* Number of Points */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Points: {numPoints}
+                </label>
+                <input
+                  type="range"
+                  min="10"
+                  max="200"
+                  value={numPoints}
+                  onChange={(e) => setNumPoints(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
               </div>
 
-              <button
-                onClick={randomizeSeed}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors mt-3"
-              >
-                Randomize Seed
-              </button>
-            </div>
-
-            {/* Display Options */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-gray-700">Display Options</h3>
-
-              <label className="flex items-center">
+              {/* Randomness */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pattern Style: {randomness}%
+                </label>
                 <input
-                  type="checkbox"
-                  checked={showVoronoi}
-                  onChange={(e) => setShowVoronoi(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={randomness}
+                  onChange={(e) => setRandomness(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                 />
-                <span className="ml-2 text-sm text-gray-700">Show Voronoi</span>
-              </label>
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>Ordered</span>
+                  <span>Random</span>
+                </div>
+              </div>
 
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={showDelaunay}
-                  onChange={(e) => setShowDelaunay(e.target.checked)}
-                  className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">Show Delaunay</span>
-              </label>
-
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={showPoints}
-                  onChange={(e) => setShowPoints(e.target.checked)}
-                  className="rounded border-gray-300 text-gray-600 focus:ring-gray-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">Show Points</span>
-              </label>
-
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={showDoubleBorder}
-                  onChange={(e) => setShowDoubleBorder(e.target.checked)}
-                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">Double Border</span>
-              </label>
-
-              <label className="flex items-center">
+              {/* Custom Boundary Toggle */}
+              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-sm font-medium text-gray-700">Custom Boundary</span>
                 <input
                   type="checkbox"
                   checked={useCustomShape}
                   onChange={(e) => setUseCustomShape(e.target.checked)}
                   className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                 />
-                <span className="ml-2 text-sm text-gray-700">Custom Boundary</span>
               </label>
             </div>
-
-            {/* Border Offset Control */}
-            {showDoubleBorder && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Border Offset: {borderOffset}px
-                  </label>
-                  <input
-                    type="range"
-                    min="2"
-                    max="20"
-                    step="1"
-                    value={borderOffset}
-                    onChange={(e) => setBorderOffset(parseInt(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
-
-              </div>
-            )}
-
-            {/* Custom Circle Controls */}
-            {useCustomShape && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">Custom Circle</h3>
-
-                {/* Jaggedness Controls */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Jaggedness: {jaggedness}%
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="80"
-                      step="1"
-                      value={jaggedness}
-                      onChange={(e) => setJaggedness(parseInt(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Edge Detail: {jaggedPoints} points
-                    </label>
-                    <input
-                      type="range"
-                      min="8"
-                      max="64"
-                      step="4"
-                      value={jaggedPoints}
-                      onChange={(e) => setJaggedPoints(parseInt(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  <button
-                    onClick={() => setBoundarySeed(Date.now())}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                  >
-                    Randomize Boundary
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {customCircle && (
-                    <button
-                      onClick={clearCustomShape}
-                      className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                    >
-                      Clear Circle
-                    </button>
-                  )}
-                </div>
-
-                <div className="text-xs text-gray-500 space-y-1">
-                  {customCircle ? (
-                    <>
-                      <p>• Jagged boundary active (radius: {Math.round(customCircle.baseRadius)}px)</p>
-                      <p>• Jaggedness: {jaggedness}% with {jaggedPoints} edge points</p>
-                    </>
-                  ) : (
-                    <p>• Jagged boundary will be created automatically</p>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Action Buttons */}
             <div className="space-y-3">
               <button
-                onClick={generatePattern}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                onClick={randomizeSeed}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
               >
-                Generate New Pattern
+                Randomize
               </button>
+            </div>
 
+            {/* Collapsible Sections */}
+            <div className="space-y-3 border-t pt-4">
+              {/* Display Settings */}
               <button
-                onClick={clearPoints}
-                className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                onClick={() => setShowDisplaySettings(!showDisplaySettings)}
+                className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                Clear All Points
+                <span className="text-sm font-medium text-gray-700">Display Options</span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${showDisplaySettings ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </button>
 
-              <div className="space-y-2">
-                <button
-                  onClick={() => setShowExportOptions(!showExportOptions)}
-                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-between"
-                >
-                  <span>Export Options</span>
-                  <svg
-                    className={`w-4 h-4 transition-transform ${showExportOptions ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
+              {showDisplaySettings && (
+                <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showVoronoi}
+                      onChange={(e) => setShowVoronoi(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Voronoi Lines</span>
+                  </label>
 
-                {showExportOptions && (
-                  <div className="space-y-3 p-3 bg-gray-50 rounded-lg border">
-                    {/* Circle Diameter Control */}
-                    {useCustomShape && customCircle && (
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showDelaunay}
+                      onChange={(e) => setShowDelaunay(e.target.checked)}
+                      className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Delaunay Lines</span>
+                  </label>
+
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showPoints}
+                      onChange={(e) => setShowPoints(e.target.checked)}
+                      className="rounded border-gray-300 text-gray-600 focus:ring-gray-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Points</span>
+                  </label>
+
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showDoubleBorder}
+                      onChange={(e) => setShowDoubleBorder(e.target.checked)}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Double Border</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Boundary Settings */}
+              {useCustomShape && (
+                <>
+                  <button
+                    onClick={() => setShowBoundarySettings(!showBoundarySettings)}
+                    className="w-full flex items-center justify-between p-3 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                  >
+                    <span className="text-sm font-medium text-emerald-700">Boundary Settings</span>
+                    <svg
+                      className={`w-4 h-4 transition-transform ${showBoundarySettings ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showBoundarySettings && (
+                    <div className="space-y-3 p-3 bg-emerald-50 rounded-lg">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Circle Diameter (mm)
+                        <label className="block text-sm font-medium text-emerald-700 mb-2">
+                          Jaggedness: {jaggedness}%
                         </label>
                         <input
-                          type="number"
-                          min="10"
-                          max="500"
-                          step="5"
-                          value={circleDiameterMM}
-                          onChange={(e) => setCircleDiameterMM(parseInt(e.target.value) || 100)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter diameter in mm"
+                          type="range"
+                          min="0"
+                          max="80"
+                          step="1"
+                          value={jaggedness}
+                          onChange={(e) => setJaggedness(parseInt(e.target.value))}
+                          className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
                         />
                       </div>
-                    )}
 
+                      <div>
+                        <label className="block text-sm font-medium text-emerald-700 mb-2">
+                          Edge Detail: {jaggedPoints}
+                        </label>
+                        <input
+                          type="range"
+                          min="8"
+                          max="64"
+                          step="4"
+                          value={jaggedPoints}
+                          onChange={(e) => setJaggedPoints(parseInt(e.target.value))}
+                          className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => setBoundarySeed(Date.now())}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                      >
+                        Randomize Boundary
+                      </button>
+
+                      {customCircle && (
+                        <button
+                          onClick={clearCustomShape}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                        >
+                          Clear Boundary
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Advanced Settings */}
+              <button
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <span className="text-sm font-medium text-gray-700">Advanced Settings</span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${showAdvancedSettings ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showAdvancedSettings && (
+                <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Line Width: {strokeWidth}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="5"
+                      step="0.5"
+                      value={strokeWidth}
+                      onChange={(e) => setStrokeWidth(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+
+                  {showDoubleBorder && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Border Offset: {borderOffset}px
+                      </label>
+                      <input
+                        type="range"
+                        min="2"
+                        max="20"
+                        step="1"
+                        value={borderOffset}
+                        onChange={(e) => setBorderOffset(parseInt(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Export Options */}
+              <button
+                onClick={() => setShowExportOptions(!showExportOptions)}
+                className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+              >
+                <span className="text-sm font-medium text-purple-700">Export to DXF</span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${showExportOptions ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showExportOptions && (
+                <div className="space-y-3 p-3 bg-purple-50 rounded-lg">
+                  {useCustomShape && customCircle && (
+                    <div>
+                      <label className="block text-sm font-medium text-purple-700 mb-2">
+                        Circle Diameter (mm)
+                      </label>
+                      <input
+                        type="number"
+                        min="10"
+                        max="500"
+                        step="5"
+                        value={circleDiameterMM}
+                        onChange={(e) => setCircleDiameterMM(parseInt(e.target.value) || 100)}
+                        className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        placeholder="Enter diameter in mm"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
                     <label className="flex items-center">
                       <input
                         type="checkbox"
@@ -828,7 +851,7 @@ export default function VoronoiDesigner() {
                         onChange={(e) => setExportVoronoi(e.target.checked)}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700">Export Voronoi Lines</span>
+                      <span className="ml-2 text-sm text-gray-700">Voronoi Lines</span>
                     </label>
 
                     <label className="flex items-center">
@@ -838,7 +861,7 @@ export default function VoronoiDesigner() {
                         onChange={(e) => setExportDelaunay(e.target.checked)}
                         className="rounded border-gray-300 text-red-600 focus:ring-red-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700">Export Delaunay Lines</span>
+                      <span className="ml-2 text-sm text-gray-700">Delaunay Lines</span>
                     </label>
 
                     <label className="flex items-center">
@@ -848,7 +871,7 @@ export default function VoronoiDesigner() {
                         onChange={(e) => setExportPoints(e.target.checked)}
                         className="rounded border-gray-300 text-green-600 focus:ring-green-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700">Export Points</span>
+                      <span className="ml-2 text-sm text-gray-700">Points</span>
                     </label>
 
                     <label className="flex items-center">
@@ -858,7 +881,7 @@ export default function VoronoiDesigner() {
                         onChange={(e) => setExportDoubleBorder(e.target.checked)}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700">Export Double Border</span>
+                      <span className="ml-2 text-sm text-gray-700">Double Border</span>
                     </label>
 
                     <label className="flex items-center">
@@ -868,27 +891,28 @@ export default function VoronoiDesigner() {
                         onChange={(e) => setExportBoundary(e.target.checked)}
                         className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700">Export Boundary</span>
+                      <span className="ml-2 text-sm text-gray-700">Boundary</span>
                     </label>
                   </div>
-                )}
 
-                <button
-                  onClick={exportToDXF}
-                  disabled={points.length === 0 || (!exportVoronoi && !exportDelaunay && !exportPoints && !exportDoubleBorder && !exportBoundary)}
-                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                >
-                  Export to DXF
-                </button>
-              </div>
+                  <button
+                    onClick={exportToDXF}
+                    disabled={points.length === 0 || (!exportVoronoi && !exportDelaunay && !exportPoints && !exportDoubleBorder && !exportBoundary)}
+                    className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Download DXF
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Instructions */}
-            <div className="text-xs text-gray-500 space-y-1">
-              <p>• Click on the canvas to add points manually</p>
-              <p>• Enable &quot;Custom Boundary&quot; to draw constraint shapes</p>
-              <p>• Use the controls to adjust the pattern</p>
-              <p>• Export to DXF for use in CAD software</p>
+            {/* Status Info */}
+            <div className="text-xs text-gray-500 space-y-1 border-t pt-4">
+              <p>• Click canvas to add points manually</p>
+              <p>• {points.length} points currently placed</p>
+              {customCircle && (
+                <p>• Boundary: {Math.round(customCircle.baseRadius * 2)}px diameter</p>
+              )}
             </div>
           </div>
 
@@ -897,7 +921,7 @@ export default function VoronoiDesigner() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-800">Pattern Preview</h2>
               <div className="text-sm text-gray-500">
-                {points.length} points • Click to add more
+                Click to add points
               </div>
             </div>
 

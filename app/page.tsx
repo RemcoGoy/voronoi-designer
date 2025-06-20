@@ -25,7 +25,7 @@ export default function VoronoiDesigner() {
   const [showVoronoi, setShowVoronoi] = useState(false);
   const [showDelaunay, setShowDelaunay] = useState(false);
   const [showDoubleBorder, setShowDoubleBorder] = useState(true);
-  const [borderOffset, setBorderOffset] = useState(18);
+  const [borderOffset, setBorderOffset] = useState(8);
   const [strokeWidth, setStrokeWidth] = useState(1);
   const [seed, setSeed] = useState(Date.now());
   const [randomness, setRandomness] = useState(65); // 0 = grid-like, 100 = fully random
@@ -44,7 +44,7 @@ export default function VoronoiDesigner() {
   const [exportDoubleBorder, setExportDoubleBorder] = useState(true);
   const [exportBoundary, setExportBoundary] = useState(true);
   const [showExportOptions, setShowExportOptions] = useState(false);
-  const [circleDiameterMM, setCircleDiameterMM] = useState(100); // Diameter in millimeters
+  const [circleDiameterMM, setCircleDiameterMM] = useState(250); // Diameter in millimeters
 
   // UI state
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -247,6 +247,97 @@ export default function VoronoiDesigner() {
     return true;
   };
 
+  // Helper function to clip line segment to boundary
+  const clipLineToShape = (startPoint: Point, endPoint: Point): Point[] | null => {
+    if (!useCustomShape || !customCircle) {
+      return [startPoint, endPoint];
+    }
+
+    const startInside = isPointInCustomShape(startPoint);
+    const endInside = isPointInCustomShape(endPoint);
+
+    // Both points inside
+    if (startInside && endInside) {
+      return [startPoint, endPoint];
+    }
+
+    // Both points outside
+    if (!startInside && !endInside) {
+      // Check if line passes through the shape
+      const intersections = findLineShapeIntersections(startPoint, endPoint);
+      if (intersections.length >= 2) {
+        return [intersections[0], intersections[1]];
+      }
+      return null;
+    }
+
+    // One point inside, one outside
+    const intersections = findLineShapeIntersections(startPoint, endPoint);
+    if (intersections.length > 0) {
+      if (startInside) {
+        return [startPoint, intersections[0]];
+      } else {
+        return [intersections[0], endPoint];
+      }
+    }
+
+    return null;
+  };
+
+  // Helper function to find intersections between a line and the shape boundary
+  const findLineShapeIntersections = (p1: Point, p2: Point): Point[] => {
+    if (!customCircle || customCircle.jaggedPoints.length === 0) {
+      return [];
+    }
+
+    const intersections: Point[] = [];
+    const jaggedPoints = customCircle.jaggedPoints;
+
+    // Check intersection with each edge of the jagged boundary
+    for (let i = 0; i < jaggedPoints.length; i++) {
+      const edgeStart = jaggedPoints[i];
+      const edgeEnd = jaggedPoints[(i + 1) % jaggedPoints.length];
+
+      const intersection = lineLineIntersection(p1, p2, edgeStart, edgeEnd);
+      if (intersection) {
+        intersections.push(intersection);
+      }
+    }
+
+    // Sort intersections by distance from p1
+    intersections.sort((a, b) => {
+      const distA = Math.sqrt((a.x - p1.x) ** 2 + (a.y - p1.y) ** 2);
+      const distB = Math.sqrt((b.x - p1.x) ** 2 + (b.y - p1.y) ** 2);
+      return distA - distB;
+    });
+
+    return intersections;
+  };
+
+  // Helper function to find intersection between two line segments
+  const lineLineIntersection = (p1: Point, p2: Point, p3: Point, p4: Point): Point | null => {
+    const x1 = p1.x, y1 = p1.y;
+    const x2 = p2.x, y2 = p2.y;
+    const x3 = p3.x, y3 = p3.y;
+    const x4 = p4.x, y4 = p4.y;
+
+    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(denom) < 1e-10) return null; // Lines are parallel
+
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+
+    // Check if intersection is within both line segments
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+      return {
+        x: x1 + t * (x2 - x1),
+        y: y1 + t * (y2 - y1)
+      };
+    }
+
+    return null;
+  };
+
   // Generate new pattern
   const generatePattern = () => {
     const randomPoints = generateRandomPoints(numPoints, seed);
@@ -366,9 +457,32 @@ export default function VoronoiDesigner() {
     if (showVoronoi) {
       ctx.strokeStyle = '#2563eb';
       ctx.lineWidth = strokeWidth;
-      ctx.beginPath();
-      voronoi.render(ctx);
-      ctx.stroke();
+
+      if (useCustomShape && customCircle) {
+        // Clip Voronoi edges to boundary
+        for (let i = 0; i < points.length; i++) {
+          const cell = voronoi.cellPolygon(i);
+          if (cell && cell.length > 2) {
+            for (let j = 0; j < cell.length; j++) {
+              const start = { x: cell[j][0], y: cell[j][1] };
+              const end = { x: cell[(j + 1) % cell.length][0], y: cell[(j + 1) % cell.length][1] };
+
+              const clippedLine = clipLineToShape(start, end);
+              if (clippedLine) {
+                ctx.beginPath();
+                ctx.moveTo(clippedLine[0].x, clippedLine[0].y);
+                ctx.lineTo(clippedLine[1].x, clippedLine[1].y);
+                ctx.stroke();
+              }
+            }
+          }
+        }
+      } else {
+        // Normal Voronoi rendering when no custom shape
+        ctx.beginPath();
+        voronoi.render(ctx);
+        ctx.stroke();
+      }
     }
 
     // Draw double border (inset Voronoi cells)
@@ -381,13 +495,30 @@ export default function VoronoiDesigner() {
         if (cell && cell.length > 2) {
           const insetCell = createInsetPolygon(cell, borderOffset);
 
-          ctx.beginPath();
-          ctx.moveTo(insetCell[0][0], insetCell[0][1]);
-          for (let j = 1; j < insetCell.length; j++) {
-            ctx.lineTo(insetCell[j][0], insetCell[j][1]);
+          if (useCustomShape && customCircle) {
+            // Clip inset cell edges to boundary
+            for (let j = 0; j < insetCell.length; j++) {
+              const start = { x: insetCell[j][0], y: insetCell[j][1] };
+              const end = { x: insetCell[(j + 1) % insetCell.length][0], y: insetCell[(j + 1) % insetCell.length][1] };
+
+              const clippedLine = clipLineToShape(start, end);
+              if (clippedLine) {
+                ctx.beginPath();
+                ctx.moveTo(clippedLine[0].x, clippedLine[0].y);
+                ctx.lineTo(clippedLine[1].x, clippedLine[1].y);
+                ctx.stroke();
+              }
+            }
+          } else {
+            // Normal inset cell rendering when no custom shape
+            ctx.beginPath();
+            ctx.moveTo(insetCell[0][0], insetCell[0][1]);
+            for (let j = 1; j < insetCell.length; j++) {
+              ctx.lineTo(insetCell[j][0], insetCell[j][1]);
+            }
+            ctx.closePath();
+            ctx.stroke();
           }
-          ctx.closePath();
-          ctx.stroke();
         }
       }
     }
@@ -396,9 +527,32 @@ export default function VoronoiDesigner() {
     if (showDelaunay) {
       ctx.strokeStyle = '#dc2626';
       ctx.lineWidth = strokeWidth;
-      ctx.beginPath();
-      delaunay.render(ctx);
-      ctx.stroke();
+
+      if (useCustomShape && customCircle) {
+        // Clip Delaunay edges to boundary
+        for (let i = 0; i < delaunay.triangles.length; i += 3) {
+          const p1 = points[delaunay.triangles[i]];
+          const p2 = points[delaunay.triangles[i + 1]];
+          const p3 = points[delaunay.triangles[i + 2]];
+
+          // Draw three edges of the triangle, clipped to boundary
+          const edges = [[p1, p2], [p2, p3], [p3, p1]];
+          for (const [start, end] of edges) {
+            const clippedLine = clipLineToShape(start, end);
+            if (clippedLine) {
+              ctx.beginPath();
+              ctx.moveTo(clippedLine[0].x, clippedLine[0].y);
+              ctx.lineTo(clippedLine[1].x, clippedLine[1].y);
+              ctx.stroke();
+            }
+          }
+        }
+      } else {
+        // Normal Delaunay rendering when no custom shape
+        ctx.beginPath();
+        delaunay.render(ctx);
+        ctx.stroke();
+      }
     }
 
     // Draw points
@@ -461,9 +615,22 @@ export default function VoronoiDesigner() {
         if (cell && cell.length > 2) {
           // Create polyline for each cell
           for (let j = 0; j < cell.length; j++) {
-            const start = cell[j];
-            const end = cell[(j + 1) % cell.length];
-            drawing.drawLine(scaleCoord(start[0]), scaleCoord(start[1]), scaleCoord(end[0]), scaleCoord(end[1]));
+            const start = { x: cell[j][0], y: cell[j][1] };
+            const end = { x: cell[(j + 1) % cell.length][0], y: cell[(j + 1) % cell.length][1] };
+
+            if (useCustomShape && customCircle) {
+              const clippedLine = clipLineToShape(start, end);
+              if (clippedLine) {
+                drawing.drawLine(
+                  scaleCoord(clippedLine[0].x),
+                  scaleCoord(clippedLine[0].y),
+                  scaleCoord(clippedLine[1].x),
+                  scaleCoord(clippedLine[1].y)
+                );
+              }
+            } else {
+              drawing.drawLine(scaleCoord(start.x), scaleCoord(start.y), scaleCoord(end.x), scaleCoord(end.y));
+            }
           }
         }
       }
@@ -476,9 +643,22 @@ export default function VoronoiDesigner() {
         const p2 = points[delaunay.triangles[i + 1]];
         const p3 = points[delaunay.triangles[i + 2]];
 
-        drawing.drawLine(scaleCoord(p1.x), scaleCoord(p1.y), scaleCoord(p2.x), scaleCoord(p2.y));
-        drawing.drawLine(scaleCoord(p2.x), scaleCoord(p2.y), scaleCoord(p3.x), scaleCoord(p3.y));
-        drawing.drawLine(scaleCoord(p3.x), scaleCoord(p3.y), scaleCoord(p1.x), scaleCoord(p1.y));
+        const edges = [[p1, p2], [p2, p3], [p3, p1]];
+        for (const [start, end] of edges) {
+          if (useCustomShape && customCircle) {
+            const clippedLine = clipLineToShape(start, end);
+            if (clippedLine) {
+              drawing.drawLine(
+                scaleCoord(clippedLine[0].x),
+                scaleCoord(clippedLine[0].y),
+                scaleCoord(clippedLine[1].x),
+                scaleCoord(clippedLine[1].y)
+              );
+            }
+          } else {
+            drawing.drawLine(scaleCoord(start.x), scaleCoord(start.y), scaleCoord(end.x), scaleCoord(end.y));
+          }
+        }
       }
     }
 
@@ -491,9 +671,22 @@ export default function VoronoiDesigner() {
 
           // Create polyline for each inset cell
           for (let j = 0; j < insetCell.length; j++) {
-            const start = insetCell[j];
-            const end = insetCell[(j + 1) % insetCell.length];
-            drawing.drawLine(scaleCoord(start[0]), scaleCoord(start[1]), scaleCoord(end[0]), scaleCoord(end[1]));
+            const start = { x: insetCell[j][0], y: insetCell[j][1] };
+            const end = { x: insetCell[(j + 1) % insetCell.length][0], y: insetCell[(j + 1) % insetCell.length][1] };
+
+            if (useCustomShape && customCircle) {
+              const clippedLine = clipLineToShape(start, end);
+              if (clippedLine) {
+                drawing.drawLine(
+                  scaleCoord(clippedLine[0].x),
+                  scaleCoord(clippedLine[0].y),
+                  scaleCoord(clippedLine[1].x),
+                  scaleCoord(clippedLine[1].y)
+                );
+              }
+            } else {
+              drawing.drawLine(scaleCoord(start.x), scaleCoord(start.y), scaleCoord(end.x), scaleCoord(end.y));
+            }
           }
         }
       }
